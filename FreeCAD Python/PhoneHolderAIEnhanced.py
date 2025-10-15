@@ -1,109 +1,105 @@
-import FreeCAD as App
-import Part
-from FreeCAD import Vector
+import FreeCAD as App       # type: ignore
+import Part                 # type: ignore
+from FreeCAD import Vector  # type: ignore
 
-doc = App.newDocument("PhoneHolderOptimized")
+doc = App.newDocument("PhoneHolderAIEnhanced")
 
-def fuse_all(base, shapes):
-    for s in shapes:
-        base = base.fuse(s)
-    return base
+# Parameters
+cyl_radius = 2
+cyl_height = 15.5
 
-def cut_all(base, shapes):
-    for s in shapes:
-        base = base.cut(s)
-    return base
+# Main block
+main_block = Part.makeBox(73, 48, 31.5)
+current_shape = main_block
 
-# --- Base block and initial cuts ---
-main = Part.makeBox(73, 48, 31.5)
-cuts = [
-    Part.makeBox(61.5, 48, 15.5, Vector(12.5, 0, 8)),
-    Part.makeBox(48, 15.5, 8, Vector(25, 16.25, 0)),
-]
-main = cut_all(main, cuts)
+# Cut 1
+cut1 = Part.makeBox(61.5, 48, 15.5, Vector(12.5, 0, 8))
+current_shape = current_shape.cut(cut1)
 
-# --- Cylindrical top (main hole + outer shape) ---
+# Cut 2
+cut2 = Part.makeBox(48, 15.5, 8, Vector(25, 16.25, 0))
+current_shape = current_shape.cut(cut2)
+
+# Large cylinder and subtract smaller cylinder
 base_point = Vector(49, 24, 31.5)
-outer_cyl = Part.makeCylinder(23, 28, base_point)
-inner_cyl = Part.makeCylinder(11, 28, base_point)
-main = main.fuse(outer_cyl).cut(inner_cyl)
+large_cyl = Part.makeCylinder(23, 28, base_point)
+small_cyl = Part.makeCylinder(11, 28, base_point)
 
-# --- Side block fusions ---
-fuse_blocks = [
-    Part.makeBox(2, 24, 22, Vector(48, 12, 31.5)),
-    Part.makeBox(24, 2, 22, Vector(37, 23, 31.5)),
-    Part.makeBox(25, 15.5, 25, Vector(0, 16.25, -25)),
+current_shape = current_shape.fuse(large_cyl)
+current_shape = current_shape.cut(small_cyl)
+
+# Additional blocks
+new_blocks = [
+    (2, 24, 22, Vector(48, 12, 31.5)),
+    (24, 2, 22, Vector(37, 23, 31.5)),
+    (25, 15.5, 25, Vector(0, 16.25, -25)),
 ]
-main = fuse_all(main, fuse_blocks)
 
-# --- Cable hole (rotated cylinder along Y) ---
-cable_cyl = Part.makeCylinder(2, 15.5)
-rot = App.Rotation(Vector(1, 0, 0), 90)
-cable_cyl.Placement = App.Placement(Vector(12.5, 31.75, -12.5), rot)
-main = main.cut(cable_cyl)
+for length, width, height, pos in new_blocks:
+    blk = Part.makeBox(length, width, height, pos)
+    current_shape = current_shape.fuse(blk)
 
-# --- Cable wall cuts ---
-cuts = [
-    Part.makeBox(12.5, 15.5, 4, Vector(0, 16.25, -14.5)),
-    Part.makeBox(2, 15.5, 2, Vector(0, 16.25, -10.5)),
-    Part.makeBox(2, 15.5, 2, Vector(0, 16.25, -16.5)),
-    Part.makeBox(2, 15.5, 2, Vector(0, 16.25, -25)),
+# Cable cut
+cable_cut = Part.makeCylinder(cyl_radius, cyl_height)
+cable_cut.Placement = App.Placement(Vector(12.5, 31.75, -12.5), App.Rotation(Vector(1, 0, 0), 90))
+current_shape = current_shape.cut(cable_cut)
+
+# Additional cut boxes
+cut_boxes = [
+    (12.5, 15.5, 4, Vector(0, 16.25, -14.5)),
+    (2, 15.5, 2, Vector(0, 16.25, -10.5)),
+    (2, 15.5, 2, Vector(0, 16.25, -16.5)),
+    (2, 15.5, 2, Vector(0, 16.25, -25)),
+    (2, 48, 2, Vector(71, 0, 23.5)),
+    (2, 48, 2, Vector(71, 0, 6)),
+    (2, 2, 8, Vector(71, 14.25, 0)),
+    (2, 2, 8, Vector(71, 31.75, 0)),
+    (46, 2, 2, Vector(25, 14.25, 6)),
+    (46, 2, 2, Vector(25, 31.75, 6)),
+    (2, 48, 2, Vector(0, 0, 29.5)),
+    (2, 16.25, 2, Vector(0, 0, 0)),
+    (2, 16.25, 2, Vector(0, 31.75, 0)),
 ]
-main = cut_all(main, cuts)
 
-# --- Function for connecting cylinders ---
-def make_cyl(p1, p2, r):
-    d = p2.sub(p1)
-    h = d.Length
-    if h == 0: return None
-    a = d.normalize()
-    if abs(a.z - 1) < 1e-6:
-        rot = App.Rotation()
-    elif abs(a.z + 1) < 1e-6:
-        rot = App.Rotation(Vector(1,0,0),180)
-    else:
-        rot = App.Rotation(Vector(0,0,1), a)
-    cyl = Part.makeCylinder(r, h)
-    cyl.Placement = App.Placement(p1, rot)
-    return cyl
+for length, width, height, pos in cut_boxes:
+    box = Part.makeBox(length, width, height, pos)
+    current_shape = current_shape.cut(box)
 
-# --- Rounded edges (every cylinder present) ---
-edges = [
-    (Vector(2, 16.25, -8.5), Vector(2, 31.75, -8.5)),
-    (Vector(2, 16.25, -16.5), Vector(2, 31.75, -16.5)),
-    (Vector(2, 16.25, -23), Vector(2, 31.75, -23)),
-    (Vector(71, 0, 6), Vector(71, 14.25, 6)),
-    (Vector(71, 33.75, 6), Vector(71, 48, 6)),
-    (Vector(71, 14.25, 0), Vector(71, 14.25, 6)),
-    (Vector(71, 33.75, 0), Vector(71, 33.75, 6)),
-    (Vector(25, 14.25, 6), Vector(71, 14.25, 6)),
-    (Vector(25, 33.75, 6), Vector(71, 33.75, 6)),
-    (Vector(71, 0, 25.5), Vector(71, 48, 25.5)),
-    (Vector(2, 0, 29.5), Vector(2, 48, 29.5)),
-    (Vector(2, 0, 2), Vector(2, 16.25, 2)),
-    (Vector(2, 31.75, 2), Vector(2, 48, 2)),
+# Cylinders (wires or supports)
+cyl_positions = [
+    ((2, 31.75, -8.5), (2, 16.25, -8.5)),
+    ((2, 31.75, -16.5), (2, 16.25, -16.5)),
+    ((2, 31.75, -23), (2, 16.25, -23)),
+    ((71, 0, 6), (71, 14.25, 6)),
+    ((71, 33.75, 6), (71, 48, 6)),
+    ((71, 14.25, 0), (71, 14.25, 6)),
+    ((71, 33.75, 0), (71, 33.75, 6)),
+    ((25, 14.25, 6), (71, 14.25, 6)),
+    ((25, 33.75, 6), (71, 33.75, 6)),
+    ((71, 0, 25.5), (71, 48, 25.5)),
+    ((2, 0, 29.5), (2, 48, 29.5)),
+    ((2, 0, 2), (2, 16.25, 2)),
+    ((2, 31.75, 2), (2, 48, 2)),
 ]
-main = fuse_all(main, [make_cyl(a, b, 2) for a, b in edges if make_cyl(a, b, 2)])
 
-# --- Spheres ---
-spheres = [Part.makeSphere(2, Vector(71, 14.25, 6)), Part.makeSphere(2, Vector(71, 33.75, 6))]
-main = fuse_all(main, spheres)
+for start, end in cyl_positions:
+    start_v = Vector(*start)
+    end_v = Vector(*end)
+    direction = end_v - start_v
+    height = direction.Length
+    axis = direction.normalize()
+    rotation = App.Rotation(Vector(0, 0, 1), direction)
+    cyl = Part.makeCylinder(cyl_radius, height)
+    cyl.Placement = App.Placement(start_v, rotation)
+    current_shape = current_shape.fuse(cyl)
 
-# --- Cuts ---
-cuts = [
-    Part.makeBox(2, 48, 2, Vector(71, 0, 23.5)),
-    Part.makeBox(2, 48, 2, Vector(71, 0, 6)),
-    Part.makeBox(2, 2, 8, Vector(71, 14.25, 0)),
-    Part.makeBox(2, 2, 8, Vector(71, 31.75, 0)),
-    Part.makeBox(46, 2, 2, Vector(25, 14.25, 6)),
-    Part.makeBox(46, 2, 2, Vector(25, 31.75, 6)),
-    Part.makeBox(2, 48, 2, Vector(0, 0, 29.5)),
-    Part.makeBox(2, 16.25, 2, Vector(0, 0, 0)),
-    Part.makeBox(2, 16.25, 2, Vector(0, 31.75, 0)),
-]
-main = cut_all(main, cuts)
+# Add spheres
+sphere_pos = [Vector(71, 14.25, 6), Vector(71, 33.75, 6)]
+spheres = [Part.makeSphere(2, pos) for pos in sphere_pos]
+sphere_union = spheres[0].fuse(spheres[1])
+current_shape = current_shape.fuse(sphere_union)
 
-# --- Done ---
-final_obj = doc.addObject("Part::Feature", "PhoneHolder_Optimized")
-final_obj.Shape = main
+# Create final object in document
+final_obj = doc.addObject("Part::Feature", "Final_Model")
+final_obj.Shape = current_shape
 doc.recompute()
